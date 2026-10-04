@@ -318,10 +318,6 @@ local function get_column_area(ctx, index, tape_offset)
 end
 
 local function calculate_tape_offset(ctx, active_column)
-    if not active_column then
-        return state.tape_offset
-    end
-
     local viewport_width = ctx.area.w
     local tape_width = #state.columns * COLUMN_WIDTH
 
@@ -331,20 +327,24 @@ local function calculate_tape_offset(ctx, active_column)
 
     local offset = state.tape_offset
 
-    local column_left = ctx.area.x + (active_column - 1) * COLUMN_WIDTH + offset
-    local column_right = column_left + COLUMN_WIDTH
+    if active_column then
 
-    local viewport_left = ctx.area.x
-    local viewport_right = ctx.area.x + viewport_width
 
-    -- Aktive Column ist links außerhalb
-    if column_left < viewport_left then
-        offset = offset + (viewport_left - column_left)
-    end
+        local column_left = ctx.area.x + (active_column - 1) * COLUMN_WIDTH + offset
+        local column_right = column_left + COLUMN_WIDTH
 
-    -- Aktive Column ist rechts außerhalb
-    if column_right > viewport_right then
-        offset = offset - (column_right - viewport_right)
+        local viewport_left = ctx.area.x
+        local viewport_right = ctx.area.x + viewport_width
+
+        -- Aktive Column ist links außerhalb
+        if column_left < viewport_left then
+            offset = offset + (viewport_left - column_left)
+        end
+
+        -- Aktive Column ist rechts außerhalb
+        if column_right > viewport_right then
+            offset = offset - (column_right - viewport_right)
+        end
     end
 
     -- Tape darf nicht über den linken Rand hinaus laufen
@@ -403,12 +403,6 @@ local function recalculate(ctx)
 
     state.columns = remaining_columns
 
-    local active = active_id(ctx)
-    local active_column = find_column_index(active)
-    local tape_offset = calculate_tape_offset(ctx, active_column)
-    state.tape_offset = tape_offset
-
-
     local known = {}
 
     for _, column in ipairs(state.columns) do
@@ -416,13 +410,23 @@ local function recalculate(ctx)
     end
 
     for _, target in ipairs(ctx.targets) do
-        local id = target_id(target)
+        local window = target.window
 
-        if not known[id] then
-            add_new_target(id)
-            known[id] = true
+        if window and not window.floating then
+
+            local id = target_id(target)
+
+            if not known[id] then
+                add_new_target(id)
+                known[id] = true
+            end
         end
     end
+
+    local active = active_id(ctx)
+    local active_column = find_column_index(active)
+    local tape_offset = calculate_tape_offset(ctx, active_column)
+    state.tape_offset = tape_offset
 
     local column_count = #state.columns
 
