@@ -4,7 +4,6 @@ local state = {
     columns = {},
     pending_split = nil,
     tape_offset = 0,
-    last_tiled_column = nil,
 }
 
 local function target_id(target)
@@ -364,12 +363,6 @@ local function calculate_tape_offset(ctx, active_column)
 end
 
 local function recalculate(ctx)
-    local active = active_id(ctx)
-    local active_column = find_column_index(active)
-
-    if active_column then
-        state.last_tiled_column = active_column
-    end
 
     local targets = {}
     local present = {}
@@ -412,16 +405,6 @@ local function recalculate(ctx)
 
     local active = active_id(ctx)
     local active_column = find_column_index(active)
-
-    if not active_column and state.last_tiled_column then
-        for index, column in ipairs(state.columns) do
-            if index == state.last_tiled_column then
-                active_column = index
-                break
-            end
-        end
-    end
-
     local tape_offset = calculate_tape_offset(ctx, active_column)
     state.tape_offset = tape_offset
 
