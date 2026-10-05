@@ -43,3 +43,20 @@ hl.bind("SUPER + SHIFT + F", function()
         hl.dsp.layout("ada:refresh")
     )
 end)
+
+-- Toggle column width
+hl.bind("SUPER + f", hl.dsp.layout("span"))
+
+-- Move windows inside a column
+hl.bind("SUPER + SHIFT + right", function()
+    hl.dispatch(hl.dsp.layout("mover"))  
+end)
+hl.bind("SUPER + SHIFT + left", function()
+    hl.dispatch(hl.dsp.layout("movel"))  
+end)
+hl.bind("SUPER + SHIFT + up", function()
+    hl.dispatch(hl.dsp.layout("moveu"))  
+end)
+hl.bind("SUPER + SHIFT + down", function()
+    hl.dispatch(hl.dsp.layout("moved"))  
+end)

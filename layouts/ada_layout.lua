@@ -45,7 +45,7 @@ end
 
 local function create_leaf(id)
     if id == nil then
-        error("ada: create_lead received nil id")
+        error("ada: create_leaf received nil id")
     end
 
     return {
@@ -162,7 +162,7 @@ local function remove_id(node, id)
 
     if node.type == "leaf" then
         if node.id == id then
-            return nil, false
+            return nil, true
         end
 
         return node, false
@@ -216,7 +216,11 @@ local function remove_missing_targets(present)
 
         for id in pairs(ids) do
             if not present[id] then
-                column.root = remove_id(column.root, id)
+                local root, changed = remove_id(column.root, id)
+
+                if changed then 
+                    column.root = root
+                end
             end
         end
     end
@@ -256,25 +260,251 @@ local function place_node(ctx, targets, node, area)
     if node.direction == "d" then
         first_area = ctx:split(area, "up", ratio)
         second_area = ctx:split(area, "down", ratio)
-    end
-    
-    if node.direction == "r" then
+    elseif node.direction == "r" then
         first_area = ctx:split(area, "left", ratio)
         second_area = ctx:split(area, "right", ratio)
-    end
-    
-    if node.direction == "u" then
+    elseif node.direction == "u" then
         first_area = ctx:split(area, "down", ratio)
         second_area = ctx:split(area, "up", ratio)
-    end
-    
-    if node.direction == "l" then
+    elseif node.direction == "l" then
         first_area = ctx:split(area, "right", ratio)
         second_area = ctx:split(area, "left", ratio)
     end
 
     place_node(ctx, targets, node.children[1], first_area)
     place_node(ctx, targets, node.children[2], second_area)
+end
+
+local function get_column_area(ctx, index, tape_offset)
+    local x = ctx.area.x + tape_offset
+
+    for i = 1, index -1 do
+        x = x + state.columns[i].span * COLUMN_WIDTH
+    end
+
+    local column = state.columns[index]
+
+    return {
+        x = x,
+        y = ctx.area.y,
+        w = column.span * COLUMN_WIDTH,
+        h = ctx.area.h,
+    }
+end
+
+local function collect_geometry(ctx, targets, node, area, result)
+    if not node then
+        return
+    end
+
+    table.insert(result, {
+        node = node,
+        area = area,
+    })
+
+    if node.type == "leaf" then
+        return
+    end
+
+    local ratio = node.ratio or 0.5
+    
+    local first_area
+    local second_area
+
+    if node.direction == "d" then
+        first_area = ctx:split(area, "up", ratio)
+        second_area = ctx:split(area, "down", ratio)
+    
+    elseif node.direction == "r" then
+        first_area = ctx:split(area, "left", ratio)
+        second_area = ctx:split(area, "right", ratio)
+    
+    elseif node.direction == "u" then
+        first_area = ctx:split(area, "down", ratio)
+        second_area = ctx:split(area, "up", ratio)
+    
+    elseif node.direction == "l" then
+        first_area = ctx:split(area, "right", ratio)
+        second_area = ctx:split(area, "left", ratio)
+    end
+
+    collect_geometry(ctx, targets, node.children[1], first_area, result)
+    collect_geometry(ctx, targets, node.children[2], second_area, result)
+end
+
+local function area_contains(outer, inner)
+    return
+        inner.x >= outer.x
+        and inner.y >= outer.y
+        and inner.x + inner.w <= outer.x + outer.w
+        and inner.y + inner.h <= outer.y + outer.h
+end
+
+local function find_boundry_match(geometry, source_area, direction)
+    local source_left = source_area.x
+    local soure_right = source_area.x + source_area.w
+    local source_top = source_area.y
+    local source_bottom = source_area.y + source_area.h
+
+    local best = nil
+    local best_difference = nil
+
+    for _, entry in ipairs(geometry) do
+        local area = entry.area
+
+        local left = area.x
+        local right = area.x + area.w
+        local top = area.y
+        local bottom = area.y + area.h
+
+        local matches = false
+        local difference = nil
+
+        if direction == "right" then
+            if left == soure_right and top == source_top and bottom == source_bottom then
+                matches = true
+                difference = math.abs(area.w - source_area.w)
+            end
+        elseif direction == "left" then
+            if right == source_left and top == source_top and bottom == source_bottom then
+                matches = true
+                difference = math.abs(area.w - source_area.w)
+            end
+        elseif direction == "bottom" then
+            if top == source_bottom and left == source_left and right == soure_right then
+                matches = true
+                difference = math.abs(area.h - source_area.h)
+            end
+        elseif direction == "up" then
+            if bottom == source_top and left == source_left and right == soure_right then
+                matches = true
+                difference = math.abs(area.h - source_area.h)
+            end
+        end
+
+        if matches then
+            if not best_difference or difference < best_difference then
+                best = entry.node
+                best_difference = difference
+            end
+        end
+    end
+    
+    return best
+end
+
+local function swap_nodes(first, second)
+    if not first or not second or first == second then
+        return
+    end
+
+    local first_type = first.type
+    local first_id = first.id
+    local first_direction = first.direction
+    local first_ratio = first.ratio
+    local first_children = first.children
+
+    first.type = second.type
+    first.id = second.id
+    first.direction = second.direction
+    first.ratio = second.ratio
+    first.children = second.children
+
+    second.type = first_type
+    second.id = first_id
+    second.direction = first_direction
+    second.ratio = first_ratio
+    second.children = first_children
+end
+
+local function move_window(ctx, direction)
+    local active = active_id(ctx)
+
+    if not active then
+        return false
+    end
+
+    local column = find_column_for_id(active)
+
+    if not column then
+        return false
+    end
+
+    local column_index = find_column_index(active)
+
+    if not column_index then
+        return false
+    end
+
+    local targets = {}
+
+    for _, target in ipairs(ctx.targets) do
+        local window = target.window
+
+        if window and not window.floating then
+            targets[target_id(target)] = target
+        end
+    end
+
+    local geometry = {}
+
+    local column_area = get_column_area(
+        ctx,
+        column_index,
+        state.tape_offset
+    )
+    
+    collect_geometry(
+        ctx,
+        targets,
+        column.root,
+        column_area,
+        geometry
+    )
+
+    local source_area = nil
+    
+    for _, entry in ipairs(geometry) do
+        if entry.node.type == "leaf" and entry.node.id == active then
+            source_area = entry.area
+            break
+        end
+    end
+
+    if not source_area then
+        return false
+    end
+
+    local source = nil
+    local destination = nil
+    local best_source_area = nil
+    for _, entry in ipairs(geometry) do
+        if area_contains(entry.area, source_area) then
+            local candidate = find_boundry_match(
+                geometry,
+                entry.area,
+                direction
+            )
+
+            if candidate then
+                local candidate_size = entry.area.w * entry.area.h
+
+                if not best_source_area or candidate_size < best_source_area then
+                    source = entry
+                    destination = candidate
+                    best_source_area = candidate_size
+                end
+            end
+        end
+    end
+
+    if not source or not destination then
+        return false
+    end
+
+    swap_nodes(source.node, destination)
+
+    return true
 end
 
 local function add_new_target(id)
@@ -306,20 +536,13 @@ local function add_new_target(id)
     table.insert(state.columns, column)
 end
 
-local function get_column_area(ctx, index, tape_offset)
-    local x = ctx.area.x + (index -1) * COLUMN_WIDTH + tape_offset
-
-    return {
-        x = x,
-        y = ctx.area.y,
-        w = COLUMN_WIDTH,
-        h = ctx.area.h,
-    }
-end
-
 local function calculate_tape_offset(ctx, active_column)
     local viewport_width = ctx.area.w
-    local tape_width = #state.columns * COLUMN_WIDTH
+    local tape_width = 0
+
+    for _, column in ipairs(state.columns) do 
+        tape_width = tape_width + column.span * COLUMN_WIDTH
+    end
 
     if tape_width <= viewport_width then
         return 0
@@ -330,8 +553,12 @@ local function calculate_tape_offset(ctx, active_column)
     if active_column then
 
 
-        local column_left = ctx.area.x + (active_column - 1) * COLUMN_WIDTH + offset
-        local column_right = column_left + COLUMN_WIDTH
+        local column_left = ctx.area.x + offset
+        for i = 1, active_column -1 do
+            column_left = column_left + state.columns[i].span * COLUMN_WIDTH
+        end
+
+        local column_right = column_left + state.columns[active_column].span * COLUMN_WIDTH
 
         local viewport_left = ctx.area.x
         local viewport_right = ctx.area.x + viewport_width
@@ -428,13 +655,9 @@ local function recalculate(ctx)
     local tape_offset = calculate_tape_offset(ctx, active_column)
     state.tape_offset = tape_offset
 
-    local column_count = #state.columns
-
-    if column_count == 0 then
+    if #state.columns == 0 then
         return
     end
-
-    local remaining = ctx.area
 
     for index, column in ipairs(state.columns) do
         local area = get_column_area(ctx, index, tape_offset)
@@ -452,6 +675,47 @@ hl.layout.register("ada", {recalculate=recalculate,
 
         local command = msg:match("^(%S+)")
         local id = active_id(ctx)
+
+        if command == "span" then
+            if id then
+                local column = find_column_for_id(id)
+
+                if column then
+                    if column.span == 1 then
+                        column.span = 2
+                    else
+                        column.span = 1
+                    end
+                end
+            end
+
+            recalculate(ctx)
+            return true
+        end
+
+        if command == "mover" then
+            move_window(ctx, "right")
+            recalculate(ctx)
+            return true
+        end
+
+        if command == "movel" then
+            move_window(ctx, "left")
+            recalculate(ctx)
+            return true
+        end
+
+        if command == "moveu" then
+            move_window(ctx, "up")
+            recalculate(ctx)
+            return true
+        end
+
+        if command == "moved" then
+            move_window(ctx, "down")
+            recalculate(ctx)
+            return true
+        end
 
         if command == "splitu" or command == "u" then
             if id then
