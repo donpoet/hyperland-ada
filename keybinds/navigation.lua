@@ -60,3 +60,11 @@ end)
 hl.bind("SUPER + SHIFT + down", function()
     hl.dispatch(hl.dsp.layout("moved"))  
 end)
+
+-- Move column on tape
+hl.bind("SUPER + ALT + left", function()
+    hl.dispatch(hl.dsp.layout("columnleft"))
+end)
+hl.bind("SUPER + ALT + right", function()
+    hl.dispatch(hl.dsp.layout("columnright"))
+end)

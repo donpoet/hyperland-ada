@@ -370,7 +370,7 @@ local function find_boundry_match(geometry, source_area, direction)
                 matches = true
                 difference = math.abs(area.w - source_area.w)
             end
-        elseif direction == "bottom" then
+        elseif direction == "down" then
             if top == source_bottom and left == source_left and right == soure_right then
                 matches = true
                 difference = math.abs(area.h - source_area.h)
@@ -665,6 +665,35 @@ local function recalculate(ctx)
     end
 end
 
+local function move_column(ctx, direction)
+    local active = active_id(ctx)
+
+    if not active then
+        return
+    end
+
+    local index = find_column_index(active)
+
+    if not index then
+        return
+    end
+
+    local target = index
+
+    if direction == "left" then
+        target = index - 1
+    elseif direction == "right" then
+        target = index + 1
+    end
+
+    if target < 1 or target > #state.columns then
+        return
+    end
+
+    state.columns[index], state.columns[target] = 
+        state.columns[target], state.columns[index]
+end
+
 hl.layout.register("ada", {recalculate=recalculate,
     layout_msg = function(ctx, msg)
 
@@ -689,6 +718,18 @@ hl.layout.register("ada", {recalculate=recalculate,
                 end
             end
 
+            recalculate(ctx)
+            return true
+        end
+
+        if command == "columnleft" then
+            move_column(ctx, "left")
+            recalculate(ctx)
+            return true
+        end
+
+        if command == "columnright" then
+            move_column(ctx, "right")
             recalculate(ctx)
             return true
         end
