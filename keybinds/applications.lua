@@ -1,4 +1,4 @@
-hl.bind("SUPER + space", hl.dsp.exec_cmd("fuzzel"))
+hl.bind("SUPER + space", hl.dsp.exec_cmd("$HOME/.local/bin/fuzzel"))
 
 
 local float_next_window = false

@@ -1,4 +1,4 @@
-local COLUMN_WIDTH = 1600
+local COLUMN_WIDTH = 1700
 
 local state = {
     columns = {},
